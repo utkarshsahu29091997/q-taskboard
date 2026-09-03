@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiFetch, getToken } from "@/lib/api-client";
+import { apiFetch, getStoredUser, getToken } from "@/lib/api-client";
 import { Header } from "@/components/Header";
 import { StatusColumn } from "@/components/StatusColumn";
 import { TaskDetail } from "@/components/TaskDetail";
@@ -40,7 +40,16 @@ export default function ProjectPage() {
     onError: (err) => setError(err instanceof Error ? err.message : "create failed"),
   });
 
+  const exportTasks = useMutation({
+    mutationFn: () => apiFetch<{ created: number; updated: number; failed: { taskId: string; error: string }[] }>(`/api/projects/${id}/export`, { method: "POST" }),
+    onSuccess: (result) => {
+      setError(result.failed.length ? `Export completed with ${result.failed.length} failure(s).` : `Export complete: ${result.created} created, ${result.updated} updated.`);
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "export failed"),
+  });
+
   const project = data?.project;
+  const currentMembership = project?.memberships.find((membership) => membership.user.id === getStoredUser()?.id);
   const tasksByStatus: Record<TaskStatus, ApiTask[]> = {
     todo: [],
     in_progress: [],
@@ -86,6 +95,15 @@ export default function ProjectPage() {
                   owner: {project.owner.name} · {project.memberships.length} members
                 </p>
               </div>
+              {currentMembership && currentMembership.role !== "viewer" && (
+                <button
+                  onClick={() => { setError(null); exportTasks.mutate(); }}
+                  disabled={exportTasks.isPending}
+                  className="bg-accent hover:bg-indigo-500 text-white text-sm font-medium rounded-md px-4 py-2 disabled:opacity-50"
+                >
+                  {exportTasks.isPending ? "exporting…" : "export to Airtable"}
+                </button>
+              )}
             </div>
 
             <section className="bg-surface border border-border rounded-lg p-4 mb-6">

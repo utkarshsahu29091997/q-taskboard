@@ -54,9 +54,30 @@ class Task(models.Model):
         related_name='created_tasks',
     )
     position = models.IntegerField(default=0)
+    # The remote record is stored so repeated exports update the same Airtable
+    # row instead of creating duplicates.
+    airtable_record_id = models.CharField(max_length=32, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'tasks'
-        indexes = [models.Index(fields=['project', 'status'])]
+        indexes = [models.Index(fields=['project', 'status'], name='tasks_project_status_idx')]
+
+
+class Comment(models.Model):
+    """An immutable entry in a task's project audit trail."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='comments')
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='task_comments',
+    )
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'task_comments'
+        ordering = ['created_at', 'id']

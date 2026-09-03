@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api-client";
-import type { ApiTask, ApiProjectMember, TaskStatus } from "@/types";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiFetch, getStoredUser } from "@/lib/api-client";
+import type { ApiComment, ApiTask, ApiProjectMember, TaskStatus } from "@/types";
 import { STATUS_LABELS, STATUS_ORDER } from "@/types";
 
 type Props = {
@@ -18,6 +18,21 @@ export function TaskDetail({ task, projectId, members, onClose }: Props) {
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [assigneeId, setAssigneeId] = useState<string>(task.assigneeId ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [commentBody, setCommentBody] = useState("");
+  const role = members.find((member) => member.user.id === getStoredUser()?.id)?.role;
+  const canComment = role !== "viewer";
+
+  const commentsQuery = useQuery({
+    queryKey: ["comments", task.id],
+    queryFn: () => apiFetch<{ comments: ApiComment[] }>(`/api/tasks/${task.id}/comments`),
+  });
+  const addComment = useMutation({
+    mutationFn: (body: string) => apiFetch<{ comment: ApiComment }>(`/api/tasks/${task.id}/comments`, {
+      method: "POST", body: JSON.stringify({ body }),
+    }),
+    onSuccess: () => { setCommentBody(""); queryClient.invalidateQueries({ queryKey: ["comments", task.id] }); },
+    onError: (err) => setError(err instanceof Error ? err.message : "comment failed"),
+  });
 
   const updateTask = useMutation({
     mutationFn: (input: Partial<ApiTask>) =>
@@ -151,6 +166,23 @@ export function TaskDetail({ task, projectId, members, onClose }: Props) {
             </button>
           </div>
         </div>
+
+        <section className="mt-6 border-t border-border pt-4">
+          <h3 className="text-sm font-medium mb-3">comments</h3>
+          <div className="space-y-3 max-h-52 overflow-y-auto">
+            {commentsQuery.data?.comments.map((comment) => (
+              <article key={comment.id} className="rounded bg-bg p-3 text-sm">
+                <p>{comment.body}</p>
+                <p className="mt-1 text-xs text-muted">{comment.author.name} · {new Date(comment.createdAt).toLocaleString()}</p>
+              </article>
+            ))}
+            {!commentsQuery.isLoading && !commentsQuery.data?.comments.length && <p className="text-sm text-muted">No comments yet.</p>}
+          </div>
+          {canComment && <form className="mt-3 flex gap-2" onSubmit={(event) => { event.preventDefault(); if (commentBody.trim()) addComment.mutate(commentBody.trim()); }}>
+            <input value={commentBody} onChange={(event) => setCommentBody(event.target.value)} maxLength={5000} placeholder="Add a comment" className="flex-1 rounded-md bg-bg border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none" />
+            <button disabled={addComment.isPending} className="rounded-md bg-accent px-3 py-2 text-sm text-white disabled:opacity-50">post</button>
+          </form>}
+        </section>
       </div>
     </div>
   );
