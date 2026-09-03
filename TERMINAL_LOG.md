@@ -16,10 +16,10 @@ DJANGO_SETTINGS_MODULE=taskboard.settings_test .venv/bin/python -m pytest backen
 11 passed
 
 npm test --prefix frontend
-2 test files passed, 9 tests passed
+2 test files passed, 10 tests passed
 
 npm run build --prefix frontend
-✓ built in 526ms
+✓ production build completed
 
 DJANGO_SETTINGS_MODULE=taskboard.settings_test .venv/bin/python backend/manage.py makemigrations --check --dry-run
 No changes detected
