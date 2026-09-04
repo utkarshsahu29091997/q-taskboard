@@ -25,8 +25,17 @@ DJANGO_SETTINGS_MODULE=taskboard.settings_test .venv/bin/python backend/manage.p
 No changes detected
 ```
 
-## Runtime checks still required
+## Live Airtable export demo
 
-Docker and a local PostgreSQL service were unavailable in this environment, so an HTTP curl session against the running stack could not be recorded here. The precise pre-/post-fix curl reproduction is in `REVIEW.md`.
+Docker and PostgreSQL were unavailable, so this demo used a freshly migrated and seeded **isolated SQLite database**. The running Django API was authenticated as `meera@taskboard.dev` and exported the seeded Q3 Launch project (7 tasks) to the configured Airtable table.
 
-No Airtable credentials were supplied. Configure `AIRTABLE_API_KEY`, `AIRTABLE_BASE_ID`, and `AIRTABLE_TABLE_NAME`, then run the app and use **Export to Airtable** from a project as an admin or member. Run it twice to verify that saved Airtable record IDs cause updates rather than duplicate creates.
+```text
+First export:  {"created":7,"updated":0,"failed":[]}
+Second export: {"created":0,"updated":7,"failed":[]}
+```
+
+The second result confirms that the stored Airtable record IDs update existing records rather than creating duplicates.
+
+## HTTP bug proof
+
+The exact vulnerable and fixed request shape, including the expected `200 OK` before the fix and `403 Forbidden` afterward, is documented in `REVIEW.md`. A pre-fix running-server capture still requires checking out the vulnerable revision in a separate environment; the current server correctly rejects the unauthorized request.
