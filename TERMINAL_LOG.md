@@ -36,6 +36,13 @@ Second export: {"created":0,"updated":7,"failed":[]}
 
 The second result confirms that the stored Airtable record IDs update existing records rather than creating duplicates.
 
+After migrating the adapter to the official `airtable` npm package, the same seeded project was exported again through the running Django endpoint:
+
+```text
+Npm-client export:        {"created":0,"updated":7,"failed":[]}
+Second npm-client export: {"created":0,"updated":7,"failed":[]}
+```
+
 ## HTTP bug proof
 
 The exact vulnerable and fixed request shape, including the expected `200 OK` before the fix and `403 Forbidden` afterward, is documented in `REVIEW.md`. A pre-fix running-server capture still requires checking out the vulnerable revision in a separate environment; the current server correctly rejects the unauthorized request.
