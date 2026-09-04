@@ -49,4 +49,4 @@ Both create and update accepted an arbitrary `assigneeId`, so a task could be as
 - **Category:** Architecture
 - **Severity:** Medium
 
-The endpoint authorized callers and returned serialized tasks, but made no Airtable API request and always reported zero exported records. This leaves users believing an export succeeded when no external data exists. The new adapter uses `pyairtable`, retries transient failures, keeps processing after an individual error, and stores the Airtable record ID for idempotent re-runs.
+The endpoint authorized callers and returned serialized tasks, but made no Airtable API request and always reported zero exported records. This leaves users believing an export succeeded when no external data exists. The new server-side adapter uses the official `airtable` npm package, retries transient failures, keeps processing after an individual error, and stores the Airtable record ID for idempotent re-runs.
