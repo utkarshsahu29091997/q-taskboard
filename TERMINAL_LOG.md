@@ -45,4 +45,14 @@ Second npm-client export: {"created":0,"updated":7,"failed":[]}
 
 ## HTTP bug proof
 
-The exact vulnerable and fixed request shape, including the expected `200 OK` before the fix and `403 Forbidden` afterward, is documented in `REVIEW.md`. A pre-fix running-server capture still requires checking out the vulnerable revision in a separate environment; the current server correctly rejects the unauthorized request.
+The pre-fix capture ran commit `84cb1a6` in a separate worktree and isolated SQLite database. In both runs, `dev@example.com` (not an Onboarding project member) sent the same PATCH request for an Onboarding task:
+
+```text
+Pre-fix:  HTTP/1.1 200 OK
+          {"task":{"title":"changed by outsider", ...}}
+
+Post-fix: HTTP/1.1 403 Forbidden
+          {"error":"forbidden"}
+```
+
+This confirms the authorization fix prevents the previously successful cross-project task mutation.
