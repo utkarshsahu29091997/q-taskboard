@@ -174,7 +174,7 @@ export function TaskDetail({ task, projectId, members, onClose }: Props) {
 
         <section className="mt-6 border-t border-border pt-4">
           <h3 className="text-sm font-medium mb-3">comments</h3>
-          <div className="space-y-3 max-h-52 overflow-y-auto">
+          <div className="space-y-3">
             {commentsQuery.data?.comments.map((comment) => (
               <article key={comment.id} className="rounded bg-bg p-3 text-sm">
                 <p>{comment.body}</p>
