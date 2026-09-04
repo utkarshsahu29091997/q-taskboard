@@ -25,7 +25,19 @@ def _load_local_env():
 
 def _is_transient(error):
     status_code = getattr(error, 'status_code', None)
-    return status_code == 429 or (isinstance(status_code, int) and status_code >= 500)
+    if status_code == 429 or (isinstance(status_code, int) and status_code >= 500):
+        return True
+
+    # The Airtable Node client does not expose an HTTP status when its request
+    # fails before a response is received (for example, a connection reset or
+    # timeout). Those failures are safe to retry just like 5xx responses.
+    message = str(error).lower()
+    return (
+        'request to https://api.airtable.com/' in message
+        or 'network' in message
+        or 'econnreset' in message
+        or 'etimedout' in message
+    )
 
 
 def get_table():

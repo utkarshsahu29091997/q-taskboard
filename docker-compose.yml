@@ -12,9 +12,9 @@ services:
 
   backend:
     build: ./backend
-    # The source bind mount hides image-layer node_modules; restore the
-    # server-side Airtable npm client before starting Django.
-    command: sh -c "npm ci --omit=dev && python manage.py runserver 0.0.0.0:8000"
+    # Dependencies are baked into the image and also available in the mounted
+    # source tree; do not reinstall them on every container start.
+    command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - ./backend:/app
     env_file:
