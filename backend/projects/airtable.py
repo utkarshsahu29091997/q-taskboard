@@ -3,10 +3,24 @@ import os
 import json
 import subprocess
 import time
+from pathlib import Path
 
 
 class AirtableExportError(Exception):
     pass
+
+
+def _load_local_env():
+    """Load local development values when Django was started outside Compose."""
+    env_path = Path(__file__).resolve().parents[2] / '.env'
+    if not env_path.is_file():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 def _is_transient(error):
@@ -15,6 +29,7 @@ def _is_transient(error):
 
 
 def get_table():
+    _load_local_env()
     api_key = os.environ.get('AIRTABLE_API_KEY')
     base_id = os.environ.get('AIRTABLE_BASE_ID')
     table_name = os.environ.get('AIRTABLE_TABLE_NAME', 'Tasks')
