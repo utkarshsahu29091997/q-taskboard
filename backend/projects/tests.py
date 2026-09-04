@@ -140,7 +140,9 @@ class TestComments:
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['token']}")
         response = client.post(f'/api/tasks/{task.id}/comments', {'body': 'I should not post'}, format='json')
         assert response.status_code == 403
-        assert client.get(f'/api/tasks/{task.id}/comments').status_code == 200
+        response = client.get(f'/api/tasks/{task.id}/comments')
+        assert response.status_code == 200
+        assert [comment['body'] for comment in response.data['comments']] == ['First note']
 
 
 @pytest.mark.django_db
