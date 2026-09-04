@@ -1,0 +1,8 @@
+{
+  "name": "taskboard-airtable-adapter",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "airtable": "^0.12.2"
+  }
+}

@@ -1,8 +1,8 @@
 """Small, testable adapter around the real Airtable API."""
 import os
+import json
+import subprocess
 import time
-
-from pyairtable import Api
 
 
 class AirtableExportError(Exception):
@@ -20,7 +20,45 @@ def get_table():
     table_name = os.environ.get('AIRTABLE_TABLE_NAME', 'Tasks')
     if not api_key or not base_id:
         raise AirtableExportError('Airtable is not configured')
-    return Api(api_key).table(base_id, table_name)
+    return NpmAirtableTable(api_key, base_id, table_name)
+
+
+class NpmAirtableTable:
+    """Small server-side bridge to the official Airtable npm package."""
+
+    def __init__(self, api_key, base_id, table_name):
+        self.api_key = api_key
+        self.base_id = base_id
+        self.table_name = table_name
+
+    def _run(self, fields, record_id=None):
+        payload = {
+            'apiKey': self.api_key,
+            'baseId': self.base_id,
+            'tableName': self.table_name,
+            'fields': fields,
+            'recordId': record_id,
+        }
+        client = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'airtable_client.mjs')
+        result = subprocess.run(
+            ['node', client], input=json.dumps(payload), text=True,
+            capture_output=True, check=False,
+        )
+        if result.returncode:
+            try:
+                detail = json.loads(result.stderr)
+                error = RuntimeError(detail.get('message', 'Airtable request failed'))
+                error.status_code = detail.get('statusCode')
+                raise error
+            except json.JSONDecodeError:
+                raise RuntimeError(result.stderr or 'Airtable request failed')
+        return json.loads(result.stdout)
+
+    def create(self, fields, typecast=True):
+        return self._run(fields)
+
+    def update(self, record_id, fields, typecast=True):
+        return self._run(fields, record_id)
 
 
 def task_fields(task):

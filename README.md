@@ -123,7 +123,7 @@ AIRTABLE_BASE_ID=appXXXXXXXXXXXXXX
 AIRTABLE_TABLE_NAME=Tasks
 ```
 
-The backend uses `pyairtable` for real API calls. `backend/projects/airtable_mock.py` is a test double — use it in unit tests, not in production code.
+The Django backend invokes the official `airtable` npm package for real server-side API calls. The tests use a table double and never require Airtable credentials.
 
 ## Tech Stack
 
