@@ -32,10 +32,13 @@ export function TaskDetail({ task, projectId, members, onClose }: Props) {
     refetchOnWindowFocus: true,
   });
   const addComment = useMutation({
-    mutationFn: (body: string) => apiFetch<{ comment: ApiComment }>(`/api/tasks/${task.id}/comments`, {
+    mutationFn: (body: string) => apiFetch<{ comment: ApiComment; comments: ApiComment[] }>(`/api/tasks/${task.id}/comments`, {
       method: "POST", body: JSON.stringify({ body }),
     }),
-    onSuccess: () => { setCommentBody(""); queryClient.invalidateQueries({ queryKey: ["comments", task.id] }); },
+    onSuccess: (result) => {
+      setCommentBody("");
+      queryClient.setQueryData(["comments", task.id, currentUserId], { comments: result.comments });
+    },
     onError: (err) => setError(err instanceof Error ? err.message : "comment failed"),
   });
 

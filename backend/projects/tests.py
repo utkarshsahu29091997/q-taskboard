@@ -133,6 +133,7 @@ class TestComments:
         response = auth_client.post(f'/api/tasks/{task.id}/comments', {'body': 'First note'}, format='json')
         assert response.status_code == 201
         assert response.data['comment']['author']['email'] == user.email
+        assert [comment['body'] for comment in response.data['comments']] == ['First note']
         assert Comment.objects.filter(task=task).count() == 1
 
         login = client.post('/api/auth/login', {'email': viewer.email, 'password': 'password123'}, format='json')

@@ -235,7 +235,11 @@ class TaskCommentListCreateView(APIView):
         if not body or len(body) > 5000:
             return Response({'error': 'comment body must be between 1 and 5000 characters'}, status=status.HTTP_400_BAD_REQUEST)
         comment = Comment.objects.create(task=task, author=request.user, body=body)
-        return Response({'comment': CommentSerializer(Comment.objects.select_related('author').get(id=comment.id)).data}, status=status.HTTP_201_CREATED)
+        comments = Comment.objects.filter(task=task).select_related('author').order_by('created_at', 'id')
+        return Response({
+            'comment': CommentSerializer(Comment.objects.select_related('author').get(id=comment.id)).data,
+            'comments': CommentSerializer(comments, many=True).data,
+        }, status=status.HTTP_201_CREATED)
 
 
 class MemberAddView(APIView):
