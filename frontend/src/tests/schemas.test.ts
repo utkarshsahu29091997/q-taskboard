@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getToken, setSession, clearSession, getStoredUser } from "@/lib/api-client";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { apiFetch, getToken, setSession, clearSession, getStoredUser } from "@/lib/api-client";
 import { STATUS_ORDER, STATUS_LABELS } from "@/types";
 
 describe("session management", () => {
@@ -26,6 +26,18 @@ describe("session management", () => {
     clearSession();
     expect(getToken()).toBeNull();
     expect(getStoredUser()).toBeNull();
+  });
+
+  it("does not send a stale token when signing in", async () => {
+    setSession("stale-token", { id: "u1", email: "a@b.com", name: "Alice" });
+    const fetchSpy = vi.fn().mockResolvedValue(new Response(JSON.stringify({ token: "fresh-token" })));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await apiFetch("/api/auth/login", { method: "POST", body: "{}" });
+
+    const requestHeaders = new Headers(fetchSpy.mock.calls[0][1].headers);
+    expect(requestHeaders.get("Authorization")).toBeNull();
+    vi.unstubAllGlobals();
   });
 });
 

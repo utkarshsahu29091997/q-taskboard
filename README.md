@@ -66,6 +66,10 @@ This is part of the Ajackus evaluation process. We evaluate how you collaborate 
 
 **If you prefer a tool that doesn't store local conversations** (like browser-based ChatGPT), the screen recording will capture your interactions instead. No additional action needed from you.
 
+## Assignment Recording
+
+Loom recording: https://www.loom.com/share/21953e6fa3b94608bb03c47adf2ce416
+
 ## Seed Data
 
 All user passwords are: `password123`
@@ -123,7 +127,7 @@ AIRTABLE_BASE_ID=appXXXXXXXXXXXXXX
 AIRTABLE_TABLE_NAME=Tasks
 ```
 
-The backend uses `pyairtable` for real API calls. `backend/projects/airtable_mock.py` is a test double — use it in unit tests, not in production code.
+The Django backend invokes the official `airtable` npm package for real server-side API calls. The tests use a table double and never require Airtable credentials.
 
 ## Tech Stack
 

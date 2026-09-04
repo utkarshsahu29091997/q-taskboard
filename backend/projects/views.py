@@ -1,10 +1,11 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.db import connection
+from django.db.models import Prefetch
 from users.serializers import UserSerializer
-from .models import Project, Membership, Task
-from .serializers import ProjectDetailSerializer, TaskSerializer
+from .models import Project, Membership, Task, Comment
+from .serializers import ProjectDetailSerializer, TaskSerializer, CommentSerializer
+from .airtable import AirtableExportError, export_task, get_table
 
 
 def _get_membership(user, project_id):
@@ -62,7 +63,12 @@ class ProjectDetailView(APIView):
         try:
             project = (
                 Project.objects
-                .prefetch_related('memberships__user', 'tasks__assignee', 'tasks__created_by')
+                .prefetch_related(
+                    'memberships__user',
+                    'tasks__assignee',
+                    'tasks__created_by',
+                    Prefetch('tasks__comments', queryset=Comment.objects.select_related('author').order_by('created_at', 'id')),
+                )
                 .select_related('owner')
                 .get(id=project_id)
             )
@@ -107,27 +113,18 @@ class TaskListCreateView(APIView):
         if not membership:
             return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
 
-        q = request.query_params.get('q')
-        if q:
-            with connection.cursor() as cursor:
-                sql = (
-                    f"SELECT id, project_id, title, description, status, assignee_id, created_by_id, position, created_at, updated_at "
-                    f"FROM tasks "
-                    f"WHERE project_id = '{project_id}' "
-                    f"AND (title ILIKE '%{q}%' OR description ILIKE '%{q}%') "
-                    f"ORDER BY position ASC"
-                )
-                cursor.execute(sql)
-                columns = [col[0] for col in cursor.description]
-                rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
-            return Response({'tasks': rows})
-
         tasks = (
             Task.objects
             .filter(project_id=project_id)
-            .select_related('assignee')
+            .select_related('assignee', 'created_by')
+            .prefetch_related(Prefetch('comments', queryset=Comment.objects.select_related('author').order_by('created_at', 'id')))
             .order_by('status', 'position')
         )
+        q = (request.query_params.get('q') or '').strip()
+        if q:
+            # ORM filtering keeps user input parameterized and prevents SQL injection.
+            from django.db.models import Q
+            tasks = tasks.filter(Q(title__icontains=q) | Q(description__icontains=q))
         return Response({'tasks': TaskSerializer(tasks, many=True).data})
 
     def post(self, request, project_id):
@@ -145,6 +142,10 @@ class TaskListCreateView(APIView):
         if task_status not in ('todo', 'in_progress', 'review', 'done'):
             return Response({'error': 'invalid status'}, status=status.HTTP_400_BAD_REQUEST)
 
+        assignee_id = request.data.get('assigneeId') or None
+        if assignee_id and not Membership.objects.filter(project_id=project_id, user_id=assignee_id).exists():
+            return Response({'error': 'assignee must be a project member'}, status=status.HTTP_400_BAD_REQUEST)
+
         last = Task.objects.filter(project_id=project_id, status=task_status).order_by('-position').first()
         position = (last.position + 1) if last else 0
 
@@ -153,7 +154,7 @@ class TaskListCreateView(APIView):
             title=title,
             description=request.data.get('description') or None,
             status=task_status,
-            assignee_id=request.data.get('assigneeId') or None,
+            assignee_id=assignee_id,
             created_by=request.user,
             position=position,
         )
@@ -164,9 +165,15 @@ class TaskListCreateView(APIView):
 class TaskDetailView(APIView):
     def patch(self, request, task_id):
         try:
-            task = Task.objects.get(id=task_id)
+            task = Task.objects.select_related('project').get(id=task_id)
         except Task.DoesNotExist:
             return Response({'error': 'not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        membership = _get_membership(request.user, str(task.project_id))
+        if not membership:
+            return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        if not _can_edit_tasks(membership.role):
+            return Response({'error': 'viewers cannot update tasks'}, status=status.HTTP_403_FORBIDDEN)
 
         if 'title' in request.data:
             task.title = request.data['title'].strip()
@@ -178,7 +185,10 @@ class TaskDetailView(APIView):
                 return Response({'error': 'invalid status'}, status=status.HTTP_400_BAD_REQUEST)
             task.status = new_status
         if 'assigneeId' in request.data:
-            task.assignee_id = request.data['assigneeId'] or None
+            assignee_id = request.data['assigneeId'] or None
+            if assignee_id and not Membership.objects.filter(project_id=task.project_id, user_id=assignee_id).exists():
+                return Response({'error': 'assignee must be a project member'}, status=status.HTTP_400_BAD_REQUEST)
+            task.assignee_id = assignee_id
         task.save()
 
         task_data = TaskSerializer(Task.objects.select_related('assignee').get(id=task_id)).data
@@ -198,6 +208,38 @@ class TaskDetailView(APIView):
 
         task.delete()
         return Response({'ok': True})
+
+
+class TaskCommentListCreateView(APIView):
+    def get(self, request, task_id):
+        try:
+            task = Task.objects.select_related('project').get(id=task_id)
+        except Task.DoesNotExist:
+            return Response({'error': 'not found'}, status=status.HTTP_404_NOT_FOUND)
+        if not _get_membership(request.user, str(task.project_id)):
+            return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        comments = Comment.objects.filter(task=task).select_related('author').order_by('created_at', 'id')
+        return Response({'comments': CommentSerializer(comments, many=True).data})
+
+    def post(self, request, task_id):
+        try:
+            task = Task.objects.select_related('project').get(id=task_id)
+        except Task.DoesNotExist:
+            return Response({'error': 'not found'}, status=status.HTTP_404_NOT_FOUND)
+        membership = _get_membership(request.user, str(task.project_id))
+        if not membership:
+            return Response({'error': 'forbidden'}, status=status.HTTP_403_FORBIDDEN)
+        if not _can_edit_tasks(membership.role):
+            return Response({'error': 'viewers cannot post comments'}, status=status.HTTP_403_FORBIDDEN)
+        body = (request.data.get('body') or '').strip()
+        if not body or len(body) > 5000:
+            return Response({'error': 'comment body must be between 1 and 5000 characters'}, status=status.HTTP_400_BAD_REQUEST)
+        comment = Comment.objects.create(task=task, author=request.user, body=body)
+        comments = Comment.objects.filter(task=task).select_related('author').order_by('created_at', 'id')
+        return Response({
+            'comment': CommentSerializer(Comment.objects.select_related('author').get(id=comment.id)).data,
+            'comments': CommentSerializer(comments, many=True).data,
+        }, status=status.HTTP_201_CREATED)
 
 
 class MemberAddView(APIView):
@@ -240,4 +282,20 @@ class ExportView(APIView):
             return Response({'error': 'only admins and members can export'}, status=status.HTTP_403_FORBIDDEN)
 
         tasks = Task.objects.filter(project_id=project_id).select_related('assignee', 'created_by')
-        return Response({'exported': 0, 'tasks': TaskSerializer(tasks, many=True).data})
+        try:
+            table = get_table()
+        except AirtableExportError as error:
+            return Response({'error': str(error)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        created = updated = 0
+        failures = []
+        for task in tasks:
+            try:
+                outcome = export_task(table, task)
+                if outcome == 'created':
+                    created += 1
+                else:
+                    updated += 1
+            except AirtableExportError as error:
+                failures.append({'taskId': str(task.id), 'error': str(error)})
+        return Response({'created': created, 'updated': updated, 'failed': failures})
