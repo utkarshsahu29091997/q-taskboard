@@ -19,12 +19,17 @@ export function TaskDetail({ task, projectId, members, onClose }: Props) {
   const [assigneeId, setAssigneeId] = useState<string>(task.assigneeId ?? "");
   const [error, setError] = useState<string | null>(null);
   const [commentBody, setCommentBody] = useState("");
-  const role = members.find((member) => member.user.id === getStoredUser()?.id)?.role;
+  const currentUserId = getStoredUser()?.id;
+  const role = members.find((member) => member.user.id === currentUserId)?.role;
   const canComment = role !== "viewer";
 
   const commentsQuery = useQuery({
-    queryKey: ["comments", task.id],
+    // User-scoped caching prevents a viewer from seeing a prior member
+    // session's stale thread after switching accounts in the same browser.
+    queryKey: ["comments", task.id, currentUserId],
     queryFn: () => apiFetch<{ comments: ApiComment[] }>(`/api/tasks/${task.id}/comments`),
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
   });
   const addComment = useMutation({
     mutationFn: (body: string) => apiFetch<{ comment: ApiComment }>(`/api/tasks/${task.id}/comments`, {
